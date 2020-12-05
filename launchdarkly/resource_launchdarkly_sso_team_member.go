@@ -10,13 +10,13 @@ import (
 	ldapi "github.com/launchdarkly/api-client-go"
 )
 
-func resourceTeamMemberRole() *schema.Resource {
+func resourceSSOTeamMember() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceTeamMemberRoleCreate,
-		Read:   resourceTeamMemberRoleRead,
-		Update: resourceTeamMemberRoleUpdate,
-		Delete: resourceTeamMemberRoleDelete,
-		Exists: resourceTeamMemberRoleExists,
+		Create: resourceSSOMemberCreate,
+		Read:   resourceSSOMemberRead,
+		Update: resourceSSOMemberUpdate,
+		Delete: resourceSSOMemberDelete,
+		Exists: resourceSSOMemberExists,
 
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -43,7 +43,7 @@ func resourceTeamMemberRole() *schema.Resource {
 	}
 }
 
-func resourceTeamMemberRoleCreate(d *schema.ResourceData, metaRaw interface{}) error {
+func resourceSSOMemberCreate(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
 	memberEmail := d.Get(EMAIL).(string)
 
@@ -52,7 +52,6 @@ func resourceTeamMemberRoleCreate(d *schema.ResourceData, metaRaw interface{}) e
 		return err
 	}
 	memberID := member.Id
-
 	memberRole := ldapi.Role(d.Get(ROLE).(string))
 	customRolesRaw := d.Get(CUSTOM_ROLES).(*schema.Set).List()
 
@@ -65,6 +64,7 @@ func resourceTeamMemberRoleCreate(d *schema.ResourceData, metaRaw interface{}) e
 		return err
 	}
 
+	d.SetId(memberID)
 	patch := []ldapi.PatchOperation{
 		// these are the only fields we are allowed to update:
 		patchReplace("/role", &memberRole),
@@ -73,17 +73,16 @@ func resourceTeamMemberRoleCreate(d *schema.ResourceData, metaRaw interface{}) e
 
 	_, _, err = handleRateLimit(func() (interface{}, *http.Response, error) {
 		return handleNoConflict(func() (interface{}, *http.Response, error) {
-			return client.ld.TeamMembersApi.PatchMember(client.ctx, memberID, patch)
+			return client.ld.TeamMembersApi.PatchMember(client.ctx, d.Id(), patch)
 		})
 	})
 	if err != nil {
 		return fmt.Errorf("failed to assign role to team member with id %q: %s", memberID, handleLdapiErr(err))
 	}
-
-	return resourceTeamMemberRoleRead(d, metaRaw)
+	return resourceSSOMemberRead(d, metaRaw)
 }
 
-func resourceTeamMemberRoleRead(d *schema.ResourceData, metaRaw interface{}) error {
+func resourceSSOMemberRead(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
 	memberID := d.Id()
 
@@ -115,17 +114,12 @@ func resourceTeamMemberRoleRead(d *schema.ResourceData, metaRaw interface{}) err
 	return nil
 }
 
-func resourceTeamMemberRoleDelete(d *schema.ResourceData, metaRaw interface{}) error {
+func resourceSSOMemberDelete(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
-	memberID := d.Id()
-	patch := []ldapi.PatchOperation{
-		// these are the only fields we are allowed to update:
-		patchReplace("/role", "reader"),
-		patchReplace("/customRoles", ""),
-	}
 
 	_, _, err := handleRateLimit(func() (interface{}, *http.Response, error) {
-		return client.ld.TeamMembersApi.PatchMember(client.ctx, memberID, patch)
+		res, err := client.ld.TeamMembersApi.DeleteMember(client.ctx, d.Id())
+		return nil, res, err
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete team member with id %q: %s", d.Id(), handleLdapiErr(err))
@@ -134,14 +128,13 @@ func resourceTeamMemberRoleDelete(d *schema.ResourceData, metaRaw interface{}) e
 	return nil
 }
 
-func resourceTeamMemberRoleExists(d *schema.ResourceData, metaRaw interface{}) (bool, error) {
+func resourceSSOMemberExists(d *schema.ResourceData, metaRaw interface{}) (bool, error) {
 	return teamMemberExists(d.Id(), metaRaw.(*Client))
 }
 
-func resourceTeamMemberRoleUpdate(d *schema.ResourceData, metaRaw interface{}) error {
+func resourceSSOMemberUpdate(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
-	memberID := d.Id()
-	memberRole := d.Get(ROLE).(string)
+	memberRole := ldapi.Role(d.Get(ROLE).(string))
 	customRolesRaw := d.Get(CUSTOM_ROLES).(*schema.Set).List()
 
 	customRoleKeys := make([]string, len(customRolesRaw))
@@ -161,12 +154,12 @@ func resourceTeamMemberRoleUpdate(d *schema.ResourceData, metaRaw interface{}) e
 
 	_, _, err = handleRateLimit(func() (interface{}, *http.Response, error) {
 		return handleNoConflict(func() (interface{}, *http.Response, error) {
-			return client.ld.TeamMembersApi.PatchMember(client.ctx, memberID, patch)
+			return client.ld.TeamMembersApi.PatchMember(client.ctx, d.Id(), patch)
 		})
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update team member with id %q: %s", memberID, handleLdapiErr(err))
+		return fmt.Errorf("failed to assign role to team member with id %q: %s", d.Id(), handleLdapiErr(err))
 	}
 
-	return resourceTeamMemberRoleRead(d, metaRaw)
+	return resourceSSOMemberRead(d, metaRaw)
 }
