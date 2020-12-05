@@ -27,12 +27,6 @@ func resourceSSOTeamMember() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			ROLE: {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Computed:     true,
-				ValidateFunc: validateTeamMemberRole,
-			},
 			CUSTOM_ROLES: {
 				Type:     schema.TypeSet,
 				Set:      schema.HashString,
@@ -46,13 +40,11 @@ func resourceSSOTeamMember() *schema.Resource {
 func resourceSSOMemberCreate(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
 	memberEmail := d.Get(EMAIL).(string)
-
 	member, err := getTeamMemberByEmail(client, memberEmail)
 	if err != nil {
 		return err
 	}
 	memberID := member.Id
-	memberRole := ldapi.Role(d.Get(ROLE).(string))
 	customRolesRaw := d.Get(CUSTOM_ROLES).(*schema.Set).List()
 
 	customRoleKeys := make([]string, len(customRolesRaw))
@@ -67,7 +59,6 @@ func resourceSSOMemberCreate(d *schema.ResourceData, metaRaw interface{}) error 
 	d.SetId(memberID)
 	patch := []ldapi.PatchOperation{
 		// these are the only fields we are allowed to update:
-		patchReplace("/role", &memberRole),
 		patchReplace("/customRoles", &customRoleIds),
 	}
 
@@ -101,7 +92,6 @@ func resourceSSOMemberRead(d *schema.ResourceData, metaRaw interface{}) error {
 
 	d.SetId(member.Id)
 	_ = d.Set(EMAIL, member.Email)
-	_ = d.Set(ROLE, member.Role)
 
 	customRoleKeys, err := customRoleIDsToKeys(client, member.CustomRoles)
 	if err != nil {
@@ -134,7 +124,6 @@ func resourceSSOMemberExists(d *schema.ResourceData, metaRaw interface{}) (bool,
 
 func resourceSSOMemberUpdate(d *schema.ResourceData, metaRaw interface{}) error {
 	client := metaRaw.(*Client)
-	memberRole := ldapi.Role(d.Get(ROLE).(string))
 	customRolesRaw := d.Get(CUSTOM_ROLES).(*schema.Set).List()
 
 	customRoleKeys := make([]string, len(customRolesRaw))
@@ -148,7 +137,6 @@ func resourceSSOMemberUpdate(d *schema.ResourceData, metaRaw interface{}) error 
 
 	patch := []ldapi.PatchOperation{
 		// these are the only fields we are allowed to update:
-		patchReplace("/role", &memberRole),
 		patchReplace("/customRoles", &customRoleIds),
 	}
 
